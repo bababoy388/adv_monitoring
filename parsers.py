@@ -7,6 +7,7 @@ import re
 
 from state import multi_store, Cycle
 from config import TX_SLOT_WIDTH_MS, SYSTEM_CYCLE_MS, SYNC_TARGET_DRIFT_MS
+from data_logger import logger
 
 
 # ─── Regex: TX ───
@@ -135,8 +136,12 @@ def parse_tx(line: str, port: str) -> None:
             return
 
         if RE_ADV_START.search(line):
-            if s.current and not s.current.done:
-                s.current.done = True
+            previous = s.current or (s.cycles[-1] if s.cycles else None)
+            if previous and not previous.done:
+                previous.done = True
+            if previous and not getattr(previous, "_csv_written", False):
+                logger.write_cycle(s.label, s.port, s.ble_id, previous)
+                previous._csv_written = True
             s.cycles_total += 1
             c = Cycle(num=s.cycles_total, adv_start=multi_store.now())
             if s.pending_timings:

@@ -33,6 +33,18 @@ def _stop_readers():
     for r in _readers:
         r.join(timeout=1.0)
     _readers = []
+    # Сохраняем последние циклы, которые не успели закрыться новым ADV_START.
+    with multi_store.lock:
+        for port in multi_store.tx_order:
+            store = multi_store.tx_stores.get(port)
+            if not store:
+                continue
+            for cycle in store.cycles:
+                if not getattr(cycle, "_csv_written", False):
+                    if store.current is not cycle:
+                        cycle.done = True
+                    logger.write_cycle(store.label, store.port, store.ble_id, cycle)
+                    cycle._csv_written = True
     logger.stop()
 
 
@@ -73,7 +85,6 @@ async def start(req: StartReq):
     for i, port in enumerate(req.tx_ports, 1):
         def make_callbacks(p: str):
             def on_line(line: str):
-                logger.write_line("TX", p, line, multi_store.now())
                 with multi_store.lock:
                     s = multi_store.tx_stores.get(p)
                     if s:
@@ -103,7 +114,6 @@ async def start(req: StartReq):
         r.start()
 
     def rx_on_line(line: str):
-        logger.write_line("RX", req.rx_port, line, multi_store.now())
         with multi_store.lock:
             multi_store.raw_rx.append(line)
         parse_rx(line)
