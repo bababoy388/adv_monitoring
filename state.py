@@ -135,6 +135,7 @@ class TxStore:
         self.fallback = 0
         self.wakeups = 0
         self.rx_packets = 0
+        self.last_rx_packet_ts: Optional[float] = None
         self.raw = deque(maxlen=RAW_LINES)
 
         self.skipped_cycles = 0
@@ -234,6 +235,9 @@ class MultiStore:
         self.tx_order: List[str] = []
         self.raw_rx = deque(maxlen=RAW_LINES)
         self.rx_packets_total = 0
+        self.rx_last_line: Optional[str] = None
+        self.rx_last_line_ts: Optional[float] = None
+        self.rx_last_packet_ts: Optional[float] = None
         self.running = False
         self.error: Optional[str] = None
         self.last_rx_id: Optional[str] = None
@@ -255,8 +259,11 @@ class MultiStore:
             self.t0 = time.monotonic()
             self.tx_stores = {}
             self.tx_order = []
-            self.raw_rx = []
+            self.raw_rx = deque(maxlen=RAW_LINES)
             self.rx_packets_total = 0
+            self.rx_last_line = None
+            self.rx_last_line_ts = None
+            self.rx_last_packet_ts = None
             self.running = False
             self.error = None
             self.last_rx_id = None
@@ -292,6 +299,7 @@ class MultiStore:
                         "fallback": s.fallback,
                         "success": round(ratio, 1),
                         "rx_packets": s.rx_packets,
+                        "last_rx_packet_ts": getattr(s, "last_rx_packet_ts", None),
                         "wakeups": s.wakeups,
                         "cycles": s.cycles_total,
                     },
@@ -307,6 +315,18 @@ class MultiStore:
                 "running": self.running,
                 "error": self.error,
                 "rx_packets_total": self.rx_packets_total,
+                "rx_status": {
+                    "port": self.rx_port,
+                    "opened": self.rx_opened,
+                    "open_error": self.rx_open_error,
+                    "bytes_in": self.rx_bytes_in,
+                    "lines_in": self.rx_lines_in,
+                    "parsed_lines": self.rx_parsed_lines,
+                    "last_line": self.rx_last_line,
+                    "last_line_ts": self.rx_last_line_ts,
+                    "last_packet_ts": self.rx_last_packet_ts,
+                    "now": self.now(),
+                },
                 "tx": tx_list,
                 "raw_rx": list(self.raw_rx)[-RAW_LINES:],
                 "rx_timings": self.rx_timing_store.stats(),
@@ -343,6 +363,9 @@ class MultiStore:
                     "lines_in": self.rx_lines_in,
                     "parsed_lines": self.rx_parsed_lines,
                     "packets": self.rx_packets_total,
+                    "last_line": self.rx_last_line,
+                    "last_line_ts": self.rx_last_line_ts,
+                    "last_packet_ts": self.rx_last_packet_ts,
                     "last_raw": list(self.raw_rx)[-15:],
                     "timings_count": len(self.rx_timing_store.history),
                 },

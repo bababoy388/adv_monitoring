@@ -56,7 +56,15 @@ class StartReq(BaseModel):
 @router.get("/")
 async def index():
     path = Path(__file__).parent / "static" / "index.html"
-    return HTMLResponse(path.read_text(encoding="utf-8"))
+    # Не позволяем браузеру продолжать использовать старую страницу после обновления.
+    return HTMLResponse(
+        path.read_text(encoding="utf-8"),
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @router.get("/api/ports")
@@ -89,6 +97,8 @@ async def start(req: StartReq):
                     s = multi_store.tx_stores.get(p)
                     if s:
                         s.raw.append(line)
+                # Разбор выполняется после обновления raw-буфера, поэтому
+                # даже строки, не распознанные парсером, видны во вкладке Raw log.
                 parse_tx(line, p)
 
             def on_open():
@@ -116,6 +126,8 @@ async def start(req: StartReq):
     def rx_on_line(line: str):
         with multi_store.lock:
             multi_store.raw_rx.append(line)
+            multi_store.rx_last_line = line
+            multi_store.rx_last_line_ts = multi_store.now()
         parse_rx(line)
 
     def rx_on_open():

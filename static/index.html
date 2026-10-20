@@ -96,6 +96,19 @@
   }
   .tab-tx.active .badge-id { color: rgba(255,255,255,0.7); }
 
+
+  .rx-monitor { margin: 14px 20px 0; padding: 14px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+  .rx-monitor h2 { font-size: 15px; margin: 0 0 10px; }
+  .rx-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .rx-metric { padding: 9px 11px; background: var(--card2); border-radius: 7px; }
+  .rx-metric .label { color: var(--muted); font-size: 11px; }
+  .rx-metric .value { font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+  .rx-pill { display:inline-block; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:700; }
+  .rx-good { color:#6ee7b7; background:#064e3b; } .rx-bad { color:#fca5a5; background:#7f1d1d; } .rx-wait { color:#fde68a; background:#713f12; }
+  .rx-last-line { margin-top: 8px; color: var(--muted); font: 12px/1.5 Consolas, monospace; overflow-wrap:anywhere; white-space:pre-wrap; }
+  .rx-tx-list { display:flex; flex-wrap:wrap; gap:8px; }
+  .rx-tx-item { background:var(--card2); border:1px solid var(--border); border-radius:7px; padding:8px 10px; min-width:180px; }
+
   .stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -446,6 +459,21 @@
 
 <div id="errorBox"></div>
 
+<section class="rx-monitor" aria-live="polite">
+  <h2>Приёмник RX — контроль входящих пакетов</h2>
+  <div class="rx-overview">
+    <div class="rx-metric"><div class="label">COM-порт RX</div><div class="value" id="rxPortValue">—</div></div>
+    <div class="rx-metric"><div class="label">Соединение с портом</div><div class="value" id="rxOpenValue">—</div></div>
+    <div class="rx-metric"><div class="label">Байт принято</div><div class="value" id="rxBytesValue">0</div></div>
+    <div class="rx-metric"><div class="label">Строк принято</div><div class="value" id="rxLinesValue">0</div></div>
+    <div class="rx-metric"><div class="label">Пакетов распознано</div><div class="value" id="rxPacketsValue">0</div></div>
+    <div class="rx-metric"><div class="label">Последняя активность</div><div class="value" id="rxActivityValue">—</div></div>
+  </div>
+  <div style="font-weight:600; margin-bottom:7px;">Пакеты по передатчикам</div>
+  <div class="rx-tx-list" id="rxTxList"><span style="color:var(--muted)">Запусти мониторинг для проверки приёма.</span></div>
+  <div class="rx-last-line" id="rxLastLine">Последняя строка RX: —</div>
+</section>
+
 <div class="tx-tabs hidden" id="txTabs"></div>
 
 <div class="stats">
@@ -744,22 +772,60 @@ function renderTxTabs(txList) {
 function connectWS() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(proto + "//" + location.host + "/ws");
+  ws.onopen = () => {
+    if (lastState && !lastState.error) hideError();
+    console.info("BLE Monitor WebSocket connected");
+  };
   ws.onmessage = (ev) => {
     try {
       const state = JSON.parse(ev.data);
       lastState = state;
       render(state);
     } catch (e) {
-      showError("WS parse error: " + e.message);
-      console.error(e, ev.data);
+      showError("Ошибка обновления данных: " + e.message);
+      console.error("WebSocket message/render error", e, ev.data);
     }
   };
-  ws.onclose = () => setTimeout(connectWS, 1000);
-  ws.onerror = () => ws.close();
+  ws.onclose = () => {
+    showError("Соединение с сервером потеряно. Повторное подключение...");
+    setTimeout(connectWS, 1000);
+  };
+  ws.onerror = (e) => {
+    console.error("BLE Monitor WebSocket error", e);
+    try { ws.close(); } catch (_) {}
+  };
 }
 
 function v(x, fallback = "—") {
   return (x === null || x === undefined) ? fallback : x;
+}
+
+function renderRxMonitor(state) {
+  const rx = state.rx_status || {};
+  const put = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+  put("rxPortValue", rx.port || "—");
+  const openEl = $("rxOpenValue");
+  if (openEl) {
+    if (rx.open_error) { openEl.innerHTML = `<span class="rx-pill rx-bad">Ошибка открытия</span>`; openEl.title = rx.open_error; }
+    else if (rx.opened) openEl.innerHTML = `<span class="rx-pill rx-good">Порт открыт</span>`;
+    else openEl.innerHTML = `<span class="rx-pill rx-wait">Ожидание</span>`;
+  }
+  put("rxBytesValue", Number(rx.bytes_in || 0).toLocaleString());
+  put("rxLinesValue", Number(rx.lines_in || 0).toLocaleString());
+  put("rxPacketsValue", Number(state.rx_packets_total || 0).toLocaleString());
+  const age = (ts) => { if (ts === null || ts === undefined) return "нет"; const sec = Math.max(0, (Number(rx.now || 0) - Number(ts))); return sec < 1 ? "сейчас" : `${sec.toFixed(1)} с назад`; };
+  put("rxActivityValue", age(rx.last_line_ts));
+  const last = $("rxLastLine");
+  if (last) last.textContent = "Последняя строка RX: " + (rx.last_line || "—");
+  const list = $("rxTxList");
+  if (list) {
+    const tx = state.tx || [];
+    list.innerHTML = tx.length ? tx.map(t => {
+      const s = t.stats || {}; const count = Number(s.rx_packets || 0);
+      const got = count > 0;
+      return `<div class="rx-tx-item"><div><b>${escapeHtml(t.label)}</b> ${t.ble_id ? `<code>0x${escapeHtml(t.ble_id)}</code>` : `<span style="color:var(--muted)">ID не определён</span>`}</div><div style="margin-top:5px"><span class="rx-pill ${got ? 'rx-good' : 'rx-wait'}">${got ? 'Пакеты есть' : 'Пакетов пока нет'}</span></div><div style="margin-top:4px">Принято: <b>${count}</b></div><div style="color:var(--muted);font-size:11px">Последний пакет: ${age(s.last_rx_packet_ts)}</div></div>`;
+    }).join("") : `<span style="color:var(--muted)">TX ещё не настроены.</span>`;
+  }
 }
 
 function render(state) {
@@ -791,6 +857,7 @@ function render(state) {
         `selected: <b>${selectedCycleNum !== null ? "#" + selectedCycleNum : "—"}</b>`;
     }
 
+    renderRxMonitor(state);
     renderTxTabs(txList);
 
     if (activeTx) {

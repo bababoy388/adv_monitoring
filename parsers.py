@@ -254,10 +254,12 @@ def parse_rx(line: str) -> None:
         with multi_store.lock:
             multi_store.last_rx_id = tx_ble_id
             multi_store.rx_packets_total += 1
+            multi_store.rx_last_packet_ts = multi_store.now()
             multi_store.rx_parsed_lines += 1
             s = _find_tx(tx_ble_id)
             if s:
                 s.rx_packets += 1
+                s.last_rx_packet_ts = multi_store.now()
                 c = _current_cycle(s)
                 if c:
                     c.rx_slot  = idx

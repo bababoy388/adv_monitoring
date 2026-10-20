@@ -78,7 +78,12 @@ class SerialReader(threading.Thread):
                 try:
                     self.on_line(line)
                 except Exception as e:
-                    print(f"[{self.name}] parse error: {e}")
+                    # Не проглатываем ошибку молча: показываем её в консоли
+                    # и на панели Debug, но продолжаем читать следующие строки.
+                    msg = f"{self.name} обработка строки: {type(e).__name__}: {e}"
+                    print(f"[{self.name}] parse error: {msg}")
+                    with multi_store.lock:
+                        multi_store.error = msg
 
         try:
             if self.ser:
