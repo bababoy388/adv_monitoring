@@ -88,11 +88,24 @@ def _find_tx(tx_id: str):
 
 
 def _current_cycle(s):
+    """Return current/latest cycle, creating one from RX evidence if needed.
+
+    Some firmware builds do not print the TX-side "Starting advertising" line
+    in the selected serial log. In that case RX packets still provide enough
+    evidence to populate the Cycles page instead of leaving it empty.
+    """
     if s.current:
         return s.current
     if s.cycles:
         return s.cycles[-1]
-    return None
+    s.cycles_total += 1
+    cycle = Cycle(num=s.cycles_total, adv_start=multi_store.now())
+    if s.pending_timings:
+        cycle.timings.update(s.pending_timings)
+        s.pending_timings = {}
+    s.cycles.append(cycle)
+    s.current = cycle
+    return cycle
 
 
 def parse_tx(line: str, port: str) -> None:
