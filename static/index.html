@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>BLE Monitor</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --card2: #273449;
+    --border: #334155; --text: #e2e8f0; --muted: #94a3b8;
+    --accent: #3b82f6; --green: #10b981; --red: #ef4444; --yellow: #f59e0b;
+    --purple: #a855f7; --cyan: #06b6d4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--card); border-bottom: 1px solid var(--border);
+    padding: 10px 20px; position: sticky; top: 0; z-index: 10;
+  }
+  .header-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .header-row + .header-row { margin-top: 8px; }
+  .spacer { flex: 1; }
+  h1 {
+    font-size: 15px; margin: 0 12px 0 0; font-weight: 600;
+    letter-spacing: .3px; display: flex; align-items: center;
+  }
+  .field { display: flex; align-items: center; gap: 6px; }
+  .field label { color: var(--muted); font-size: 12px; }
+  select, input, button {
+    background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font: inherit; font-size: 13px; outline: none;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  button { cursor: pointer; transition: background .15s; }
+  button:hover:not(:disabled) { background: #334155; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-start { background: var(--accent); border-color: var(--accent);
+    color: white; font-weight: 600; padding: 6px 16px; }
+  .btn-start:hover:not(:disabled) { background: #2563eb; }
+  .btn-stop { background: var(--red); border-color: var(--red);
+    color: white; font-weight: 600; padding: 6px 16px; }
+  .btn-stop:hover:not(:disabled) { background: #dc2626; }
+  .btn-mini { padding: 4px 10px; font-size: 12px; }
+
+  .chk-field {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--muted); font-size: 12px; cursor: pointer;
+    user-select: none;
+  }
+  .chk-field input[type="checkbox"] {
+    width: auto; margin: 0; padding: 0; cursor: pointer;
+    accent-color: var(--accent);
+  }
+
+  .tx-slots { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tx-slot {
+    display: flex; align-items: center; gap: 4px;
+    background: var(--card2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px 4px 2px 8px;
+  }
+  .tx-slot .tx-label {
+    color: var(--muted); font-size: 12px; font-weight: 600;
+    min-width: 34px;
+  }
+  .tx-slot select {
+    border: none; background: transparent;
+    padding: 4px 6px; min-width: 80px;
+  }
+  .btn-x {
+    background: transparent; border: none; color: var(--red);
+    cursor: pointer; padding: 4px 8px; font-size: 16px;
+    font-weight: 700; border-radius: 4px; line-height: 1;
+  }
+  .btn-x:hover:not(:disabled) { background: rgba(239, 68, 68, 0.15); }
+
+  .tx-tabs { display: flex; gap: 6px; padding: 12px 20px 0; flex-wrap: wrap; }
+  .tx-tabs.hidden { display: none; }
+  .tab-tx {
+    padding: 6px 16px; cursor: pointer; color: var(--muted);
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 20px; font-size: 13px; user-select: none;
+    transition: all .15s;
+  }
+  .tab-tx:hover { background: var(--card2); }
+  .tab-tx.active {
+    color: white; background: var(--accent);
+    border-color: var(--accent); font-weight: 600;
+  }
+  .tab-tx .badge-id {
+    color: var(--muted); font-size: 11px; margin-left: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .tab-tx.active .badge-id { color: rgba(255,255,255,0.7); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; padding: 16px 20px;
+  }
+  .stat {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .stat-label {
+    color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .6px;
+  }
+  .stat-value {
+    font-size: 22px; font-weight: 600; margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-sub {
+    color: var(--muted); font-size: 11px; margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat.good .stat-value { color: var(--green); }
+  .stat.bad  .stat-value { color: var(--red); }
+  .stat.warn .stat-value { color: var(--yellow); }
+
+  .panels-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px; padding: 0 20px 16px;
+  }
+  @media (max-width: 900px) {
+    .panels-row { grid-template-columns: 1fr; }
+  }
+  .panel-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 16px;
+  }
+  .panel-card h3 {
+    margin: 0 0 10px; font-size: 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .6px; font-weight: 600;
+  }
+  .drift-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  }
+  .drift-item { text-align: center; }
+  .drift-item .lbl {
+    color: var(--muted); font-size: 10px;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .drift-item .val {
+    font-size: 18px; font-weight: 600; margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .drift-item .val.good { color: var(--green); }
+  .drift-item .val.warn { color: var(--yellow); }
+  .drift-item .val.bad  { color: var(--red); }
+  .drift-sub {
+    color: var(--muted); font-size: 11px;
+    margin-top: 8px; text-align: center;
+  }
+
+  .histogram {
+    display: flex; align-items: flex-end; gap: 3px;
+    height: 80px; margin-top: 6px;
+  }
+  .hist-bar {
+    flex: 1; background: var(--accent);
+    border-radius: 2px 2px 0 0; min-height: 2px;
+    position: relative; transition: background .15s;
+  }
+  .hist-bar:hover { background: var(--cyan); }
+  .hist-bar.good { background: var(--green); }
+  .hist-bar.warn { background: var(--yellow); }
+  .hist-bar.bad  { background: var(--red); }
+  .hist-labels {
+    display: flex; justify-content: space-between;
+    color: var(--muted); font-size: 10px; margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* TX Timing waterfall */
+  .timing-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .timing-header h3 { margin: 0; }
+  .timing-badge {
+    background: var(--card2); border-radius: 10px;
+    padding: 2px 8px; font-size: 11px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .timing-badge.bad { background: #7f1d1d; color: #fca5a5; }
+  .timing-badge.warn { background: #78350f; color: #fcd34d; }
+  .timing-badge.accent { background: #1e3a8a; color: #93c5fd; }
+  .timing-badge.selected { background: var(--accent); color: white; }
+
+  .timing-bars {
+    max-height: 300px; overflow-y: auto;
+    padding-right: 4px;
+  }
+  .timing-row {
+    display: grid;
+    grid-template-columns: 150px 1fr 72px 62px 62px 62px;
+    gap: 6px; align-items: center;
+    padding: 3px 0; font-size: 11px;
+  }
+  .timing-name {
+    color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-family: Consolas, "Courier New", monospace;
+  }
+  .timing-bar-wrap {
+    background: rgba(255,255,255,0.04);
+    border-radius: 3px; height: 14px;
+    position: relative;
+  }
+  .timing-bar {
+    height: 100%; border-radius: 3px;
+    transition: width .2s;
+    background: var(--accent);
+    position: relative; z-index: 1;
+  }
+  .timing-bar.timing-outlier {
+    background: var(--red);
+    box-shadow: 0 0 6px rgba(239,68,68,0.7);
+  }
+  .timing-bar.timing-boot { background: var(--cyan); }
+  .timing-bar.timing-rx { background: #a855f7; }
+  .timing-avg-marker {
+    position: absolute; top: 0; bottom: 0;
+    width: 2px; background: rgba(255,255,255,0.8);
+    border-radius: 1px; pointer-events: none;
+    z-index: 2;
+  }
+  .timing-min-marker {
+    position: absolute; top: 0; bottom: 0;
+    width: 1px; background: rgba(16,185,129,0.7);
+    pointer-events: none; z-index: 2;
+  }
+  .timing-max-marker {
+    position: absolute; top: 0; bottom: 0;
+    width: 1px; background: rgba(239,68,68,0.7);
+    pointer-events: none; z-index: 2;
+  }
+  .timing-val {
+    text-align: right; color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .timing-val.outlier { color: var(--red); font-weight: 600; }
+  .timing-val-min {
+    text-align: right; color: var(--green);
+    font-variant-numeric: tabular-nums;
+  }
+  .timing-val-max {
+    text-align: right; color: var(--red);
+    font-variant-numeric: tabular-nums;
+  }
+  .timing-val-avg {
+    text-align: right; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tabs {
+    display: flex; gap: 4px; padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 8px 14px; cursor: pointer; color: var(--muted);
+    border-bottom: 2px solid transparent;
+    font-size: 13px; user-select: none;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .panel { padding: 12px 20px 24px; }
+  .panel.hidden { display: none; }
+
+  table {
+    width: 100%; border-collapse: collapse;
+    font-variant-numeric: tabular-nums; font-size: 12.5px;
+  }
+  thead th {
+    text-align: left; padding: 8px 8px; color: var(--muted);
+    font-weight: 500; font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: .4px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 108px; background: var(--bg);
+    white-space: nowrap;
+  }
+  tbody td { padding: 6px 8px; border-bottom: 1px solid #1a2334; }
+  tbody tr { cursor: pointer; transition: background .1s; }
+  tbody tr:hover { background: #182234; }
+  tr.fallback { background: #3b1e1e; }
+  tr.fallback:hover { background: #482323; }
+  tr.running { background: #3d3320; }
+  tr.running:hover { background: #4a3e28; }
+  tr.reboot { border-left: 3px solid var(--purple); }
+  tbody tr.selected {
+    background: #1e3a5f !important;
+    border-left: 3px solid var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(59,130,246,0.4);
+  }
+  tbody tr.selected:hover {
+    background: #254a73 !important;
+  }
+  td.num { color: var(--muted); }
+  td.drift-red { color: var(--red); font-weight: 600; }
+  td.drift-ok { color: var(--green); }
+  td.empty { color: #475569; }
+  td.dim { color: #64748b; }
+  td.ema { color: var(--cyan); }
+  td.comp { color: var(--purple); }
+
+  .flag {
+    display: inline-block; padding: 1px 6px; border-radius: 8px;
+    font-size: 10px; font-weight: 600; margin-right: 2px;
+  }
+  .flag-skip { background: #78350f; color: #fcd34d; }
+  .flag-out  { background: #7f1d1d; color: #fca5a5; }
+  .flag-warm { background: #1e3a8a; color: #93c5fd; }
+  .flag-reb  { background: #4c1d95; color: #c4b5fd; }
+  .flag-in   { background: #064e3b; color: #6ee7b7; }
+
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600;
+  }
+  .badge-ok   { background: #064e3b; color: #6ee7b7; }
+  .badge-fail { background: #7f1d1d; color: #fca5a5; }
+  .badge-wait { background: #3f3f46; color: #d4d4d8; }
+
+  .raw {
+    background: #0a0f1d; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px; line-height: 1.5;
+    max-height: 60vh; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .raw .tx { color: #4ec9b0; }
+  .raw .rx { color: #dcdcaa; }
+  .raw .rx-sep { color: #64748b; font-style: italic; margin-top: 8px; }
+
+  .debug-pre {
+    background: #0a0f1d; border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 18px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12.5px; line-height: 1.55;
+    max-height: 70vh; overflow: auto;
+    white-space: pre; color: #cbd5e1;
+  }
+  .debug-pre .ok  { color: #4ade80; }
+  .debug-pre .bad { color: #f87171; }
+  .debug-pre .hdr { color: #60a5fa; font-weight: 600; }
+  .debug-pre .muted { color: #64748b; }
+
+  .table-debug {
+    margin-top: 10px; padding: 8px 12px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px; color: var(--muted);
+  }
+  .table-debug b { color: var(--text); font-weight: 600; }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; margin-right: 8px;
+    background: var(--muted);
+  }
+  .status-dot.on  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-dot.off { background: var(--red); }
+
+  .error {
+    padding: 8px 14px; background: #7f1d1d; color: #fecaca;
+    border-radius: 6px; margin: 10px 20px; font-size: 13px;
+    font-family: Consolas, "Courier New", monospace;
+    white-space: pre-wrap; word-break: break-all;
+  }
+
+  .selection-hint {
+    font-size: 11px; color: var(--muted);
+    font-style: italic; margin-top: 6px;
+  }
+
+  /* RX Timing таблица */
+  .rx-timing-table {
+    width: 100%; border-collapse: collapse;
+    font-variant-numeric: tabular-nums; font-size: 12.5px;
+  }
+  .rx-timing-table thead th {
+    text-align: left; padding: 8px 10px; color: var(--muted);
+    font-weight: 500; font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: .4px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 108px; background: var(--bg);
+  }
+  .rx-timing-table tbody td {
+    padding: 6px 10px; border-bottom: 1px solid #1a2334;
+  }
+  .rx-timing-table tbody tr { cursor: default; }
+  .rx-timing-table tbody tr:hover { background: #182234; }
+  .rx-timing-table td.group-boot  { color: var(--cyan); }
+  .rx-timing-table td.group-scan  { color: #93c5fd; }
+  .rx-timing-table td.group-ble   { color: #c4b5fd; }
+  .rx-timing-table td.group-proc  { color: #fcd34d; }
+  .rx-timing-table td.group-adv   { color: #6ee7b7; }
+  .rx-timing-table td.num         { color: var(--muted); }
+  .rx-timing-table td.val-min     { color: var(--green); }
+  .rx-timing-table td.val-avg     { color: var(--cyan); }
+  .rx-timing-table td.val-max     { color: var(--red); }
+  .rx-timing-table td.val-out     { color: var(--yellow); font-weight: 600; }
+  .rx-timing-summary {
+    padding: 8px 12px; margin-bottom: 10px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 12px; color: var(--muted);
+    font-family: Consolas, "Courier New", monospace;
+  }
+  .rx-timing-summary b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <h1><span class="status-dot" id="statusDot"></span>BLE Monitor</h1>
+
+    <div class="field">
+      <label>RX port</label>
+      <select id="rxPort"></select>
+    </div>
+
+    <div class="spacer"></div>
+
+    <label class="chk-field" title="Автопрокрутка Cycles и Raw log">
+      <input type="checkbox" id="autoScrollChk" onchange="onAutoScrollChange(this.checked)">
+      Auto-scroll
+    </label>
+
+    <button class="btn-start" id="btnStart" onclick="startMonitor()">Старт</button>
+    <button class="btn-stop" id="btnStop" onclick="stopMonitor()" disabled>Стоп</button>
+    <button class="btn-mini" onclick="loadPorts()">Обновить порты</button>
+    <button class="btn-mini" onclick="exportCSV()">📥 CSV</button>
+  </div>
+
+  <div class="header-row">
+    <label style="color: var(--muted); font-size: 12px;">TX ports:</label>
+    <div class="tx-slots" id="txSlots"></div>
+    <button class="btn-mini" onclick="addTxSlot()">+ Добавить TX</button>
+  </div>
+</header>
+
+<div id="errorBox"></div>
+
+<div class="tx-tabs hidden" id="txTabs"></div>
+
+<div class="stats">
+  <div class="stat" id="statSync">
+    <div class="stat-label">Sync OK</div>
+    <div class="stat-value" id="vSync">0</div>
+  </div>
+  <div class="stat bad" id="statFallback">
+    <div class="stat-label">Fallback</div>
+    <div class="stat-value" id="vFallback">0</div>
+  </div>
+  <div class="stat warn" id="statSuccess">
+    <div class="stat-label">Success</div>
+    <div class="stat-value" id="vSuccess">0%</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">RX packets</div>
+    <div class="stat-value" id="vRxPackets">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Wakeups</div>
+    <div class="stat-value" id="vWakeups">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Cycles</div>
+    <div class="stat-value" id="vCycles">0</div>
+  </div>
+</div>
+
+<div class="panels-row">
+  <div class="panel-card">
+    <h3>Drift statistics (all / last 20)</h3>
+    <div class="drift-grid">
+      <div class="drift-item">
+        <div class="lbl">Avg</div>
+        <div class="val" id="dAvg">—</div>
+        <div class="stat-sub" id="dAvgR">—</div>
+      </div>
+      <div class="drift-item">
+        <div class="lbl">Std</div>
+        <div class="val" id="dStd">—</div>
+        <div class="stat-sub" id="dStdR">—</div>
+      </div>
+      <div class="drift-item">
+        <div class="lbl">Min / Max</div>
+        <div class="val" id="dMinMax">—</div>
+        <div class="stat-sub" id="dMinMaxR">—</div>
+      </div>
+    </div>
+    <div class="drift-sub" id="dSamples">samples: 0</div>
+    <div class="histogram" id="histogram"></div>
+    <div class="hist-labels" id="histLabels">
+      <span>—</span><span>—</span>
+    </div>
+  </div>
+
+  <div class="panel-card">
+    <div class="timing-header">
+      <h3>TX Timing</h3>
+      <span class="timing-badge" id="timingCycleBadge">—</span>
+      <span class="timing-badge accent" id="timingSamplesBadge">avg over 0 cycles</span>
+      <span class="timing-badge" id="timingOutlierBadge">outliers: 0</span>
+    </div>
+    <div class="timing-bars" id="timingBars">
+      <div style="color: var(--muted); text-align:center; padding: 20px;">
+        Нет данных
+      </div>
+    </div>
+    <div class="selection-hint" id="selectionHint">
+      Клик по строке в таблице — показать тайминги конкретного цикла.
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="cycles" onclick="switchTab('cycles')">Cycles</div>
+  <div class="tab" data-tab="rx_timing" onclick="switchTab('rx_timing')">RX Timing</div>
+  <div class="tab" data-tab="raw" onclick="switchTab('raw')">Raw log</div>
+  <div class="tab" data-tab="debug" onclick="switchTab('debug')">Debug</div>
+</div>
+
+<div class="panel" id="panelCycles">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Time, s</th>
+        <th>Slot</th>
+        <th>Adv ms</th>
+        <th>Sync ms</th>
+        <th>Fallb</th>
+        <th>Loss</th>
+        <th>RX t_in</th>
+        <th>RX drift</th>
+        <th>Rel</th>
+        <th>EMA</th>
+        <th>n</th>
+        <th>Out</th>
+        <th>Comp</th>
+        <th>Flags</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="table-debug" id="tableDebug">Ждём данных…</div>
+</div>
+
+<div class="panel hidden" id="panelRxTiming">
+  <div class="rx-timing-summary" id="rxTimingSummary">
+    Ждём данных…
+  </div>
+  <table class="rx-timing-table">
+    <thead>
+      <tr>
+        <th>Метка</th>
+        <th>N</th>
+        <th>Last</th>
+        <th>Min</th>
+        <th>Avg</th>
+        <th>Max</th>
+        <th>Outliers</th>
+      </tr>
+    </thead>
+    <tbody id="rxTimingTbody">
+      <tr><td colspan="7" style="color: var(--muted); text-align:center; padding: 20px;">Нет данных</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="panel hidden" id="panelRaw">
+  <div class="raw" id="rawLog"></div>
+</div>
+
+<div class="panel hidden" id="panelDebug">
+  <pre class="debug-pre" id="debugLog">Загрузка…</pre>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+window.addEventListener("error", (e) => {
+  showError(`JS ERROR: ${e.message} @ ${e.filename}:${e.lineno}`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  showError(`JS PROMISE: ${e.reason}`);
+});
+
+let ws = null;
+let autoScroll = false;
+let txSlots = [];
+let nextSlotId = 1;
+let availablePorts = [];
+let activeTxIndex = 0;
+let lastState = null;
+
+let selectedCycleNum = null;
+
+function onAutoScrollChange(checked) { autoScroll = !!checked; }
+
+function selectCycle(num) {
+  if (selectedCycleNum === num) {
+    selectedCycleNum = null;
+  } else {
+    selectedCycleNum = num;
+  }
+  if (lastState) render(lastState);
+}
+
+function renderTxSlots() {
+  const container = $("txSlots");
+  container.innerHTML = txSlots.map((slot, idx) => {
+    const options = availablePorts.map(p => {
+      const sel = (p === slot.port) ? "selected" : "";
+      return `<option value="${p}" ${sel}>${p}</option>`;
+    }).join("");
+    const emptyOption = slot.port ? ""
+      : `<option value="" selected disabled>— выберите —</option>`;
+    return `
+      <div class="tx-slot">
+        <span class="tx-label">TX ${idx + 1}</span>
+        <select onchange="onTxPortChange(${slot.id}, this.value)">
+          ${emptyOption}${options}
+        </select>
+        <button class="btn-x" title="Удалить"
+                onclick="removeTxSlot(${slot.id})"
+                ${txSlots.length <= 1 ? "disabled" : ""}>−</button>
+      </div>`;
+  }).join("");
+}
+
+function onTxPortChange(slotId, port) {
+  const slot = txSlots.find(s => s.id === slotId);
+  if (slot) slot.port = port;
+}
+function addTxSlot() {
+  const id = nextSlotId++;
+  const used = new Set(txSlots.map(s => s.port).filter(Boolean));
+  const free = availablePorts.find(p => !used.has(p));
+  txSlots.push({ id, port: free || "" });
+  renderTxSlots();
+}
+function removeTxSlot(slotId) {
+  if (txSlots.length <= 1) return;
+  txSlots = txSlots.filter(s => s.id !== slotId);
+  renderTxSlots();
+}
+
+async function loadPorts() {
+  try {
+    const r = await fetch("/api/ports");
+    availablePorts = await r.json();
+    const rx = $("rxPort");
+    const prev = rx.value;
+    rx.innerHTML = availablePorts
+      .map(p => `<option value="${p}">${p}</option>`).join("");
+    if (availablePorts.includes(prev)) rx.value = prev;
+
+    if (txSlots.length === 0) {
+      const id = nextSlotId++;
+      txSlots.push({ id, port: availablePorts[0] || "" });
+    }
+    renderTxSlots();
+  } catch (e) {
+    showError("Не удалось получить список портов: " + e.message);
+  }
+}
+
+async function startMonitor() {
+  const rxPort = $("rxPort").value;
+  const txPorts = txSlots.map(s => s.port);
+
+  if (!rxPort) return showError("Выберите RX порт");
+  if (txPorts.length === 0) return showError("Добавьте хотя бы один TX");
+  if (txPorts.some(p => !p)) return showError("Все TX должны иметь порт");
+  if (new Set(txPorts).size !== txPorts.length)
+    return showError("Дублирующиеся TX порты");
+
+  try {
+    const r = await fetch("/api/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tx_ports: txPorts, rx_port: rxPort }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    $("btnStart").disabled = true;
+    $("btnStop").disabled = false;
+    activeTxIndex = 0;
+    selectedCycleNum = null;
+    hideError();
+  } catch (e) {
+    showError("Не удалось стартовать: " + e.message);
+  }
+}
+
+async function stopMonitor() {
+  try { await fetch("/api/stop", { method: "POST" }); } catch (e) {}
+  $("btnStart").disabled = false;
+  $("btnStop").disabled = true;
+}
+
+function showError(msg) { $("errorBox").innerHTML = `<div class="error">${escapeHtml(msg)}</div>`; }
+function hideError() { $("errorBox").innerHTML = ""; }
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.tab === name));
+  $("panelCycles").classList.toggle("hidden", name !== "cycles");
+  $("panelRxTiming").classList.toggle("hidden", name !== "rx_timing");
+  $("panelRaw").classList.toggle("hidden", name !== "raw");
+  $("panelDebug").classList.toggle("hidden", name !== "debug");
+  if (name === "debug") refreshDebug();
+}
+
+function setActiveTx(idx) {
+  activeTxIndex = idx;
+  selectedCycleNum = null;
+  if (lastState) render(lastState);
+}
+
+function renderTxTabs(txList) {
+  const c = $("txTabs");
+  if (!txList || txList.length <= 1) {
+    c.classList.add("hidden"); c.innerHTML = ""; return;
+  }
+  c.classList.remove("hidden");
+  c.innerHTML = txList.map((tx, idx) => {
+    const id = tx.ble_id ? `<span class="badge-id">0x${tx.ble_id}</span>` : "";
+    return `<div class="tab-tx ${idx === activeTxIndex ? "active" : ""}"
+                 onclick="setActiveTx(${idx})">
+              ${escapeHtml(tx.label)}${id}
+            </div>`;
+  }).join("");
+}
+
+function connectWS() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(proto + "//" + location.host + "/ws");
+  ws.onmessage = (ev) => {
+    try {
+      const state = JSON.parse(ev.data);
+      lastState = state;
+      render(state);
+    } catch (e) {
+      showError("WS parse error: " + e.message);
+      console.error(e, ev.data);
+    }
+  };
+  ws.onclose = () => setTimeout(connectWS, 1000);
+  ws.onerror = () => ws.close();
+}
+
+function v(x, fallback = "—") {
+  return (x === null || x === undefined) ? fallback : x;
+}
+
+function render(state) {
+  try {
+    const dot = $("statusDot");
+    dot.classList.toggle("on", state.running);
+    dot.classList.toggle("off", !state.running);
+
+    if (state.error) showError(state.error);
+    else hideError();
+
+    const txList = state.tx || [];
+    if (activeTxIndex >= txList.length) {
+      activeTxIndex = Math.max(0, txList.length - 1);
+    }
+    const activeTx = txList[activeTxIndex];
+
+    const dbg = $("tableDebug");
+    if (dbg) {
+      const cyc = activeTx ? (activeTx.cycles || []) : [];
+      const rawTx = activeTx && activeTx.raw ? activeTx.raw.length : 0;
+      const rawRx = state.raw_rx ? state.raw_rx.length : 0;
+      dbg.innerHTML =
+        `TX в state: <b>${txList.length}</b> | ` +
+        `активный: <b>${activeTx ? escapeHtml(activeTx.label) : "—"}</b> | ` +
+        `cycles: <b>${cyc.length}</b> | ` +
+        `raw TX: <b>${rawTx}</b> | ` +
+        `raw RX: <b>${rawRx}</b> | ` +
+        `selected: <b>${selectedCycleNum !== null ? "#" + selectedCycleNum : "—"}</b>`;
+    }
+
+    renderTxTabs(txList);
+
+    if (activeTx) {
+      const s = activeTx.stats;
+      $("vSync").textContent = s.sync_ok;
+      $("vFallback").textContent = s.fallback;
+      $("vSuccess").textContent = s.success + "%";
+      $("vRxPackets").textContent = s.rx_packets;
+      $("vWakeups").textContent = s.wakeups;
+      $("vCycles").textContent = s.cycles;
+
+      const successEl = $("statSuccess");
+      successEl.className = "stat " + (
+        s.success >= 90 ? "good" :
+        s.success >= 70 ? "warn" : "bad"
+      );
+
+      renderDrift(activeTx.drift, activeTx.drift_recent);
+      renderTimings(activeTx);
+      renderHistogram(activeTx.cycles || []);
+    } else {
+      ["vSync","vFallback","vRxPackets","vWakeups","vCycles"]
+        .forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+      const el = $("vSuccess"); if (el) el.textContent = "0%";
+      renderDrift({}, {});
+      renderTimings(null);
+      renderHistogram([]);
+    }
+
+    renderRxTimings(state.rx_timings || {});
+    renderTable(activeTx ? activeTx.cycles : []);
+    renderRaw(activeTx, state.raw_rx);
+
+    const debugTab = document.querySelector('.tab[data-tab="debug"]');
+    if (debugTab && debugTab.classList.contains("active")) refreshDebug();
+  } catch (err) {
+    showError(`render() error: ${err.message}`);
+    console.error("render() failed:", err, state);
+  }
+}
+
+function driftClass(v) {
+  if (v === null || v === undefined) return "";
+  const a = Math.abs(v);
+  if (a <= 300) return "good";
+  if (a <= 800) return "warn";
+  return "bad";
+}
+
+function renderDrift(all, recent) {
+  all = all || {};
+  recent = recent || {};
+  const fmt = (x) => (x === null || x === undefined) ? "—" : x;
+
+  const aAvg = $("dAvg"), aStd = $("dStd"), aMM = $("dMinMax");
+  aAvg.textContent = fmt(all.avg);
+  aAvg.className = "val " + driftClass(all.avg);
+  aStd.textContent = fmt(all.std);
+  aStd.className = "val " + (
+    all.std === null ? "" :
+    all.std < 50 ? "good" :
+    all.std < 200 ? "warn" : "bad"
+  );
+  aMM.textContent = (all.min !== null && all.max !== null)
+    ? `${all.min} / ${all.max}` : "—";
+  aMM.className = "val";
+
+  $("dAvgR").textContent = recent.avg !== undefined ? recent.avg : "—";
+  $("dStdR").textContent = recent.std !== undefined ? recent.std : "—";
+  $("dMinMaxR").textContent =
+    (recent.min !== null && recent.min !== undefined &&
+     recent.max !== null && recent.max !== undefined)
+      ? `${recent.min} / ${recent.max}` : "—";
+
+  $("dSamples").textContent = `samples: ${all.n || 0}`;
+}
+
+function fmtUs(us) {
+  if (us === null || us === undefined) return "—";
+  return us >= 1000
+    ? `${(us / 1000).toFixed(1)} ms`
+    : `${us} us`;
+}
+
+function renderTimings(tx) {
+  const container = $("timingBars");
+  const cycleBadge = $("timingCycleBadge");
+  const outlierBadge = $("timingOutlierBadge");
+  const samplesBadge = $("timingSamplesBadge");
+  const hint = $("selectionHint");
+  if (!container) return;
+
+  const anomalyCount = tx && tx.anomalies
+    ? (tx.anomalies.timing_outliers || 0) : 0;
+
+  if (outlierBadge) {
+    outlierBadge.textContent = `outliers: ${anomalyCount}`;
+    outlierBadge.className = "timing-badge" + (
+      anomalyCount === 0 ? "" :
+      anomalyCount <= 3 ? " warn" : " bad"
+    );
+  }
+
+  if (!tx || !tx.cycles || tx.cycles.length === 0) {
+    container.innerHTML = `<div style="color: var(--muted); text-align:center; padding:20px;">Нет данных</div>`;
+    if (cycleBadge) cycleBadge.textContent = "—";
+    if (samplesBadge) samplesBadge.textContent = "avg over 0 cycles";
+    if (hint) hint.textContent = "Клик по строке в таблице — показать тайминги конкретного цикла.";
+    return;
+  }
+
+  let cycle = null;
+  let isExplicitlySelected = false;
+  if (selectedCycleNum !== null) {
+    cycle = tx.cycles.find(c => c.num === selectedCycleNum);
+    if (cycle) isExplicitlySelected = true;
+  }
+  if (!cycle) {
+    cycle = tx.cycles[tx.cycles.length - 1];
+  }
+
+  if (cycleBadge) {
+    const selSuffix = isExplicitlySelected ? " (selected)" : "";
+    const running = cycle.done ? "" : " · running";
+    cycleBadge.textContent = `cycle #${cycle.num}${running}${selSuffix}`;
+    cycleBadge.className = "timing-badge" + (
+      isExplicitlySelected ? " selected" : ""
+    );
+  }
+
+  const stats = tx.timing_stats || {};
+
+  let nCycles = 0;
+  for (const st of Object.values(stats)) {
+    if (st.n > nCycles) nCycles = st.n;
+  }
+  if (samplesBadge) {
+    samplesBadge.textContent = `avg over ${nCycles} cycles`;
+  }
+
+  if (hint) {
+    if (isExplicitlySelected) {
+      hint.innerHTML = `Показан цикл <b>#${cycle.num}</b>. Клик по нему ещё раз — вернуться к последнему.`;
+    } else {
+      hint.textContent = "Клик по строке в таблице — показать тайминги конкретного цикла.";
+    }
+  }
+
+  const timings = cycle.timings || {};
+  const entries = Object.entries(timings).map(([name, t]) => ({
+    name, us: t.us, ms: t.ms, outlier: !!t.is_outlier,
+  }));
+
+  if (entries.length === 0) {
+    container.innerHTML = `<div style="color: var(--muted); text-align:center; padding:20px;">Нет [TIME] меток</div>`;
+    return;
+  }
+
+  entries.sort((a, b) => b.us - a.us);
+
+  let maxUs = 1;
+  for (const e of entries) {
+    const st = stats[e.name];
+    maxUs = Math.max(maxUs, e.us, st ? st.avg : 0, st ? st.max : 0);
+  }
+
+  container.innerHTML = entries.map(e => {
+    const st = stats[e.name];
+    const avgUs = st ? st.avg : null;
+    const minUs = st ? st.min : null;
+    const maxUsRow = st ? st.max : null;
+
+    const pct    = Math.max(1, (e.us / maxUs) * 100);
+    const avgPct = avgUs !== null ? Math.max(0, Math.min(100, (avgUs / maxUs) * 100)) : null;
+    const minPct = minUs !== null ? Math.max(0, Math.min(100, (minUs / maxUs) * 100)) : null;
+    const maxPct = maxUsRow !== null ? Math.max(0, Math.min(100, (maxUsRow / maxUs) * 100)) : null;
+
+    const isBoot = e.name.startsWith("ble_init/")
+                || e.name.startsWith("start_scan/")
+                || e.name.startsWith("adv_init/");
+    const isRx = e.name.startsWith("rx_proc/")
+              || e.name.startsWith("rx_proc_timeout/")
+              || e.name.startsWith("finalize/");
+    const cls = e.outlier ? "timing-outlier"
+              : isBoot ? "timing-boot"
+              : isRx ? "timing-rx"
+              : "";
+    const valCls = e.outlier ? "outlier" : "";
+
+    const title = st
+      ? `${e.name}\n` +
+        `current: ${e.us} us\n` +
+        `avg:     ${st.avg} us\n` +
+        `min:     ${st.min} us\n` +
+        `max:     ${st.max} us\n` +
+        `n = ${st.n}`
+      : `${e.name}\ncurrent: ${e.us} us`;
+
+    const minMaxMarkers = (st && st.n >= 2)
+      ? `<div class="timing-min-marker" style="left:${minPct}%"></div>` +
+        `<div class="timing-max-marker" style="left:${maxPct}%"></div>`
+      : "";
+    const avgMarker = (st && st.n >= 2)
+      ? `<div class="timing-avg-marker" style="left:${avgPct}%"></div>`
+      : "";
+
+    return `
+      <div class="timing-row" title="${escapeHtml(title)}">
+        <div class="timing-name">${escapeHtml(e.name)}</div>
+        <div class="timing-bar-wrap">
+          <div class="timing-bar ${cls}" style="width:${pct}%"></div>
+          ${minMaxMarkers}
+          ${avgMarker}
+        </div>
+        <div class="timing-val ${valCls}">${fmtUs(e.us)}${e.outlier ? " ⚠" : ""}</div>
+        <div class="timing-val-min">${fmtUs(minUs)}</div>
+        <div class="timing-val-max">${fmtUs(maxUsRow)}</div>
+        <div class="timing-val-avg">${fmtUs(avgUs)}</div>
+      </div>`;
+  }).join("");
+}
+
+function rxTimingGroup(name) {
+  if (name.startsWith("ble_init/") || name.startsWith("ble_deinit/")) return "boot";
+  if (name.startsWith("start_scan/") || name.startsWith("stop_scan/")
+   || name.startsWith("toggle_mode/") || name.startsWith("restart/")
+   || name.startsWith("scan_req/")) return "scan";
+  if (name.startsWith("set_adv_data/") || name.startsWith("set_rsp_data/")
+   || name.startsWith("start_adv/") || name.startsWith("stop_adv/")) return "ble";
+  if (name.startsWith("rx_proc/") || name.startsWith("rx_proc_timeout/")
+   || name.startsWith("finalize/")) return "proc";
+  if (name.startsWith("adv_report/")) return "adv";
+  return "";
+}
+
+function renderRxTimings(rxTimings) {
+  const tbody = $("rxTimingTbody");
+  const summary = $("rxTimingSummary");
+  if (!tbody) return;
+
+  const entries = Object.entries(rxTimings || {});
+  if (entries.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7"
+        style="color: var(--muted); text-align:center; padding: 20px;">
+        Нет данных</td></tr>`;
+    if (summary) summary.textContent = "Ждём данных…";
+    return;
+  }
+
+  let totalOut = 0;
+  let maxAvg = 0;
+  for (const [, s] of entries) {
+    totalOut += s.outliers || 0;
+    if (s.avg > maxAvg) maxAvg = s.avg;
+  }
+  if (summary) {
+    summary.innerHTML =
+      `меток: <b>${entries.length}</b> | ` +
+      `суммарных сэмплов: <b>${entries.reduce((a, [, s]) => a + s.n, 0)}</b> | ` +
+      `outliers: <b>${totalOut}</b> | ` +
+      `max avg: <b>${(maxAvg / 1000).toFixed(2)} ms</b>`;
+  }
+
+  const groupOrder = { proc: 0, adv: 1, ble: 2, scan: 3, boot: 4, "": 5 };
+  entries.sort((a, b) => {
+    const ga = groupOrder[rxTimingGroup(a[0])] ?? 5;
+    const gb = groupOrder[rxTimingGroup(b[0])] ?? 5;
+    if (ga !== gb) return ga - gb;
+    return b[1].avg - a[1].avg;
+  });
+
+  const fmt = (us) => {
+    if (us === null || us === undefined) return "—";
+    return us >= 1000
+      ? `${(us / 1000).toFixed(2)} ms`
+      : `${us} us`;
+  };
+
+  const groupClass = {
+    boot: "group-boot",
+    scan: "group-scan",
+    ble:  "group-ble",
+    proc: "group-proc",
+    adv:  "group-adv",
+    "":   "",
+  };
+
+  tbody.innerHTML = entries.map(([name, s]) => {
+    const grp = rxTimingGroup(name);
+    const cls = groupClass[grp] || "";
+    const outlierCls = s.outliers > 0 ? "val-out" : "";
+    return `<tr>
+      <td class="${cls}">${escapeHtml(name)}</td>
+      <td class="num">${s.n}</td>
+      <td>${fmt(s.last)}</td>
+      <td class="val-min">${fmt(s.min)}</td>
+      <td class="val-avg">${fmt(s.avg)}</td>
+      <td class="val-max">${fmt(s.max)}</td>
+      <td class="${outlierCls}">${s.outliers}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderHistogram(cycles) {
+  const container = $("histogram");
+  const labels = $("histLabels");
+
+  const vals = cycles
+    .map(c => c.rx_drift)
+    .filter(x => x !== null && x !== undefined);
+
+  if (vals.length === 0) {
+    container.innerHTML = "";
+    labels.innerHTML = "<span>—</span><span>—</span>";
+    return;
+  }
+
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const range = Math.max(1, max - min);
+  const BUCKETS = 20;
+  const bucketSize = range / BUCKETS;
+
+  const buckets = new Array(BUCKETS).fill(0);
+  for (const vv of vals) {
+    let b = Math.floor((vv - min) / bucketSize);
+    if (b >= BUCKETS) b = BUCKETS - 1;
+    if (b < 0) b = 0;
+    buckets[b]++;
+  }
+
+  const peak = Math.max(...buckets, 1);
+  container.innerHTML = buckets.map((count, i) => {
+    const h = (count / peak) * 100;
+    const bucketVal = min + i * bucketSize;
+    let cls = "good";
+    const a = Math.abs(bucketVal);
+    if (a > 800) cls = "bad";
+    else if (a > 300) cls = "warn";
+    return `<div class="hist-bar ${cls}" style="height:${h}%"
+                 title="${Math.round(bucketVal)} ms: ${count}"></div>`;
+  }).join("");
+
+  labels.innerHTML =
+    `<span>${Math.round(min)} ms</span>` +
+    `<span>${Math.round((min + max) / 2)} ms</span>` +
+    `<span>${Math.round(max)} ms</span>`;
+}
+
+function renderTable(cycles) {
+  const tbody = $("tbody");
+  if (!tbody) return;
+
+  if (!cycles || cycles.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="16"
+        style="color: var(--muted); text-align:center; padding: 20px;">
+        Нет данных</td></tr>`;
+    return;
+  }
+
+  try {
+    tbody.innerHTML = cycles.map(c => {
+      const classes = [];
+      if (c.fallback) classes.push("fallback");
+      else if (!c.done) classes.push("running");
+      if (c.reboot) classes.push("reboot");
+
+      const isSelected = (selectedCycleNum !== null && selectedCycleNum === c.num);
+
+      let driftCls = "empty";
+      if (c.rx_drift !== null && c.rx_drift !== undefined) {
+        driftCls = Math.abs(c.rx_drift) > 800 ? "drift-red" : "drift-ok";
+      }
+
+      const fallb = c.fallback
+        ? `<span class="badge badge-fail">✗</span>`
+        : (c.done ? `<span class="badge badge-ok">✓</span>`
+                  : `<span class="badge badge-wait">…</span>`);
+
+      const flags = [];
+      if (c.skipped_cycle) flags.push(`<span class="flag flag-skip">SKIP</span>`);
+      if (c.inside_slot === false) flags.push(`<span class="flag flag-out">OUT</span>`);
+      if (c.inside_slot === true) flags.push(`<span class="flag flag-in">IN</span>`);
+      if (c.warmup_done) flags.push(`<span class="flag flag-warm">WU</span>`);
+      if (c.reboot) flags.push(`<span class="flag flag-reb">RB</span>`);
+
+      const status = c.done ? "done" : "RUNNING";
+      const advStart = (typeof c.adv_start === "number")
+        ? c.adv_start.toFixed(2) : "—";
+
+      const emaStr = c.ema_ms !== null && c.ema_ms !== undefined
+        ? c.ema_ms.toFixed(1) : "—";
+      const emaOut = c.ema_outliers !== null && c.ema_outliers !== undefined
+        ? c.ema_outliers : "—";
+
+      const rowCls = classes.join(" ") + (isSelected ? " selected" : "");
+
+      return `<tr class="${rowCls}"
+                  onclick="selectCycle(${c.num})">
+        <td class="num">${c.num}</td>
+        <td>${advStart}</td>
+        <td>${v(c.rx_slot)}</td>
+        <td>${v(c.adv_ms)}</td>
+        <td>${v(c.sync_ms)}</td>
+        <td>${fallb}</td>
+        <td class="dim">${v(c.loss)}</td>
+        <td>${v(c.rx_t)}</td>
+        <td class="${driftCls}">${v(c.rx_drift)}</td>
+        <td class="dim">${v(c.rel_ms)}</td>
+        <td class="ema">${emaStr}</td>
+        <td class="dim">${v(c.ema_n)}</td>
+        <td class="dim">${emaOut}</td>
+        <td class="comp">${v(c.comp_ms)}</td>
+        <td>${flags.join("")}</td>
+        <td>${status}</td>
+      </tr>`;
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="16" style="color: var(--red);">
+      renderTable error: ${escapeHtml(err.message)}</td></tr>`;
+    console.error("renderTable failed:", err, cycles);
+  }
+
+  if (autoScroll) {
+    const last = tbody.lastElementChild;
+    if (last) last.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function renderRaw(tx, rawRx) {
+  const el = $("rawLog");
+  const lines = [];
+
+  if (tx && tx.raw && tx.raw.length) {
+    lines.push(...tx.raw.map(l =>
+      `<span class="tx">[${escapeHtml(tx.label)}] ${escapeHtml(l)}</span>`));
+  }
+  if (rawRx && rawRx.length) {
+    if (lines.length) lines.push(`<span class="rx-sep">─── RX ───</span>`);
+    lines.push(...rawRx.map(l =>
+      `<span class="rx">[RX] ${escapeHtml(l)}</span>`));
+  }
+
+  if (!lines.length) {
+    el.innerHTML = `<span style="color: var(--muted);">Нет данных</span>`;
+  } else {
+    el.innerHTML = lines.join("\n");
+    if (autoScroll) el.scrollTop = el.scrollHeight;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+
+async function refreshDebug() {
+  try {
+    const r = await fetch("/api/debug");
+    const d = await r.json();
+    renderDebug(d);
+  } catch (e) {
+    $("debugLog").textContent = "Ошибка запроса /api/debug: " + e.message;
+  }
+}
+
+function colorize(cond, txt) {
+  return cond
+    ? `<span class="ok">${txt}</span>`
+    : `<span class="bad">${txt}</span>`;
+}
+
+function renderDebug(d) {
+  const L = [];
+  L.push(`<span class="hdr">═══ STATUS ═══</span>`);
+  L.push(`  running: ${colorize(d.running, d.running)}`);
+  L.push(`  error:   ${d.error ? `<span class="bad">${escapeHtml(d.error)}</span>` : "—"}`);
+  L.push("");
+  L.push(`<span class="hdr">═══ RX ═══</span>`);
+  L.push(`  port:     ${d.rx.port || "—"}`);
+  L.push(`  opened:   ${colorize(d.rx.opened, d.rx.opened)}`);
+  if (d.rx.open_error) L.push(`  err:      <span class="bad">${escapeHtml(d.rx.open_error)}</span>`);
+  L.push(`  bytes_in: ${colorize(d.rx.bytes_in > 0, d.rx.bytes_in)}`);
+  L.push(`  lines_in: ${colorize(d.rx.lines_in > 0, d.rx.lines_in)}`);
+  L.push(`  parsed:   ${colorize(d.rx.parsed_lines > 0, d.rx.parsed_lines)}`);
+  L.push(`  packets:  ${d.rx.packets}`);
+  L.push(`  rx_marks: ${d.rx.timings_count || 0}`);
+  L.push("");
+  L.push(`  <span class="muted">last raw (10):</span>`);
+  (d.rx.last_raw || []).slice(-10).forEach(l => L.push(`    ${escapeHtml(l)}`));
+  L.push("");
+  L.push(`<span class="hdr">═══ TX ═══</span>`);
+  if (!d.tx || d.tx.length === 0) {
+    L.push(`  <span class="muted">нет TX</span>`);
+  } else {
+    d.tx.forEach(t => {
+      L.push(`  <b>${escapeHtml(t.label)}</b>  [${escapeHtml(t.port)}]  id=${t.ble_id ? "0x" + t.ble_id : "?"}`);
+      L.push(`    opened:   ${colorize(t.opened, t.opened)}`);
+      if (t.open_error) L.push(`    err:      <span class="bad">${escapeHtml(t.open_error)}</span>`);
+      L.push(`    bytes_in: ${colorize(t.bytes_in > 0, t.bytes_in)}`);
+      L.push(`    lines_in: ${colorize(t.lines_in > 0, t.lines_in)}`);
+      L.push(`    parsed:   ${colorize(t.parsed_lines > 0, t.parsed_lines)}`);
+      L.push(`    cycles:   ${colorize(t.cycles > 0, t.cycles)}`);
+      L.push(`    <span class="muted">last raw (8):</span>`);
+      (t.last_raw || []).slice(-8).forEach(l => L.push(`      ${escapeHtml(l)}`));
+      L.push("");
+    });
+  }
+  $("debugLog").innerHTML = L.join("\n");
+}
+
+setInterval(() => {
+  const debugTab = document.querySelector('.tab[data-tab="debug"]');
+  if (debugTab && debugTab.classList.contains("active")) refreshDebug();
+}, 1000);
+
+function exportCSV() { window.location.href = "/api/export.csv"; }
+
+$("autoScrollChk").checked = autoScroll;
+loadPorts();
+connectWS();
+</script>
+</body>
+</html>
